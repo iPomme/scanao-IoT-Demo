@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.nao</groupId>
+    <artifactId>parent-IoT</artifactId>
+    <packaging>pom</packaging>
+    <version>1.0-SNAPSHOT</version>
+    <name>NAO :: Parent pom for the IoT demonstration</name>
+    <url>http://www.nao.io</url>
+    <scm>
+        <url>https://github.com/iPomme/scanao-IoT-Demo</url>
+        <connection>scm:git:git://github.com/iPomme/scanao-IoT-Demo.git</connection>
+        <developerConnection>scm:git:git@github.com:iPomme/scanao-IoT-Demo.git</developerConnection>
+    </scm>
+    <properties>
+        <maven.compiler.source>1.7</maven.compiler.source>
+        <maven.compiler.target>1.7</maven.compiler.target>
+        <encoding>UTF-8</encoding>
+        <nao.version>2.1-SNAPSHOT</nao.version>
+        <scala.version>2.11.4</scala.version>
+        <scala.bin>2.11</scala.bin>
+        <akka.version>2.3.8</akka.version>
+        <akka.tracing.version>0.4</akka.tracing.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <uncommons.version>1.2.3</uncommons.version>
+        <!-- Testing framework -->
+        <junit.version>4.12</junit.version>
+        <scalatest.artifiactId>scalatest</scalatest.artifiactId>
+        <scalatest.version>2.2.1</scalatest.version>
+    </properties>
+    <repositories>
+        <repository>
+            <id>typesafe</id>
+            <name>Typesafe Repository</name>
+            <url>http://repo.typesafe.com/typesafe/releases/</url>
+        </repository>
+    </repositories>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.nao</groupId>
+                <artifactId>messages</artifactId>
+                <version>${nao.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.scala-lang</groupId>
+                <artifactId>scala-library</artifactId>
+                <version>${scala.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-actor_${scala.bin}</artifactId>
+                <version>${akka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-remote_${scala.bin}</artifactId>
+                <version>${akka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-osgi_${scala.bin}</artifactId>
+                <version>${akka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-kernel_${scala.bin}</artifactId>
+                <version>${akka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-agent_${scala.bin}</artifactId>
+                <version>${akka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.akka</groupId>
+                <artifactId>akka-slf4j_${scala.bin}</artifactId>
+                <version>${akka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.gatling.uncommons.maths</groupId>
+                <artifactId>uncommons-maths</artifactId>
+                <version>${uncommons.version}</version>
+            </dependency>
+
+            <!-- Test -->
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.scalatest</groupId>
+                <artifactId>${scalatest.artifiactId}_${scala.bin}</artifactId>
+                <version>${scalatest.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- scala compilation -->
+                <plugin>
+                    <groupId>net.alchim31.maven</groupId>
+                    <artifactId>scala-maven-plugin</artifactId>
+                    <version>3.1.6</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>compile</goal>
+                                <goal>testCompile</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <scalaVersion>${scala.version}</scalaVersion>
+                        <recompileMode>incremental</recompileMode>
+                        <!-- zinc server started with: zinc -start -->
+                        <useZincServer>true</useZincServer>
+                        <!-- JVM arguments -->
+                        <jvmArgs>
+                            <jvmArg>-Xms64m</jvmArg>
+                            <jvmArg>-Xmx1024m</jvmArg>
+                        </jvmArgs>
+                        <!-- javac arguments (incremental compiler is compiling java files) -->
+                        <javacArgs>
+
+                        </javacArgs>
+                        <!-- scalac arguments -->
+                        <args>
+                            <!--<arg>-deprecation</arg>-->
+                        </args>
+                    </configuration>
+                </plugin>
+
+                <!-- Build number -->
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>buildnumber-maven-plugin</artifactId>
+                    <version>1.3</version>
+                    <executions>
+                        <execution>
+                            <phase>validate</phase>
+                            <goals>
+                                <goal>create</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <doCheck>false</doCheck>
+                        <doUpdate>false</doUpdate>
+                    </configuration>
+                </plugin>
+                <!-- tests execution -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>2.12.2</version>
+                    <configuration>
+                        <!--<forkMode>always</forkMode>-->
+                        <argLine>-Xms512m -Xmx1024m -XX:MaxPermSize=512m</argLine>
+                        <useFile>false</useFile>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-report-plugin</artifactId>
+                    <version>2.12.2</version>
+                    <executions>
+                        <execution>
+                            <id>html report for tests</id>
+                            <phase>site</phase>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+            </plugins>
+        </pluginManagement>
+        <plugins>
+        <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>buildnumber-maven-plugin</artifactId>
+            <configuration>
+                <format>{0,number,000}</format>
+                <items>
+                    <item>buildNumber0</item>
+                </items>
+            </configuration>
+        </plugin>
+        </plugins>
+        <finalName>${project.artifactId}-${project.version}-b${buildNumber}</finalName>
+    </build>
+</project>
