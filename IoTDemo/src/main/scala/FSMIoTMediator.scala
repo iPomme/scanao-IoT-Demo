@@ -16,17 +16,40 @@
  */
 package io.nao.iot
 
+import java.io.BufferedReader
+
 import akka.actor._
+import io.nao.iot.FSMIoTMediator._
 import io.nao.scanao.msg.tech.NaoEvent
 import io.nao.scanao.msg.{tech, txt}
-import io.nao.iot.FSMIoTMediator._
+import org.apache.commons.httpclient.HttpClient
+import org.apache.commons.httpclient.methods.PostMethod
 
 import scala.collection.immutable.HashMap
 
+// Message for this demonstration
 sealed trait DemoMsg
 
+// Technical messages
 object InfoState extends DemoMsg
 
+object ResetState extends DemoMsg
+
+// Heart Beat messages
+object SlowHeartBeat extends DemoMsg
+
+object NormalHeartBeat extends DemoMsg
+
+object FastHeartBeat extends DemoMsg
+
+// Authentication messages
+case class Authenticate(name: String) extends DemoMsg
+
+// T24 messages
+object GetBalance extends DemoMsg
+
+
+// Main states of the demonstration
 sealed trait InitState
 
 object Initializing extends InitState
@@ -34,6 +57,8 @@ object Initializing extends InitState
 object Initialized extends InitState
 
 object Started extends InitState
+
+object Authenticated extends InitState
 
 case class References(queue: scala.collection.immutable.HashMap[String, Option[ActorRef]])
 
@@ -112,6 +137,9 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
     case Event(NaoEvent(eventName, values, message), References(h)) =>
       log.info(s"received NaoEvent name: $eventName values: $values message: $message")
       // TODO: act according in case of nao event received.
+      if (eventName == "FaceDetected") {
+        goto(Authenticated)
+      }
       stay()
     case Event(InfoState, _) =>
       sender() ! "Started"
@@ -121,14 +149,39 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
       stay()
   }
 
+  when(Authenticated) {
+    case Event(m: txt.Say, References(h)) =>
+      sendSay(m, h)
+      stay()
+    case Event(ResetState, _) =>
+      goto(Started)
+    case Event(NaoEvent(eventName, values, message), References(h)) =>
+      log.info(s"received NaoEvent name: $eventName values: $values message: $message")
+
+      stay()
+    case Event(GetBalance, References(h)) =>
+      h(naoText).map(_ ! txt.Say(s"Bon, je vais demander ce qu'il te reste sur ton compte."))
+      val record = sendPost("ENQUIRY.SELECT,,INPUTT/123456,ACCOUNT-LIST,@ID:EQ:=2000000062")
+      // Split the answer on the double quote take the last occurence and remove quotes and comma
+      val balance = getBalance(record)
+      h(naoText).map(_ ! txt.Say(s"Chere Nicolas, il the reste $balance sur ton compte!"))
+      stay()
+    case Event(InfoState, _) =>
+      sender() ! "Authenticated"
+      stay()
+    case Event(m@_, References(h)) =>
+      log.info(s"UNKNOWN MESSAGE: $m")
+      stay()
+  }
+
   onTransition {
     case Initializing -> Initialized =>
       log.info("Transition to Initialized, unstash the messages ...")
-      // TODO: get local actors for the demo fsmDayNightActor = context.actorOf(Props(classOf[FSMDayNight], nextStateData.queue), "daynight")
       unstashAll()
     case Initialized -> Started =>
       log.info("Transition to Started")
-
+    case Started -> Authenticated =>
+      self ! GetBalance
 
   }
 
@@ -145,6 +198,7 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
       ref(naoText).get ! msg
     }
   }
+
 }
 
 /**
@@ -161,4 +215,29 @@ object FSMIoTMediator {
   val naoMemory = s"$remoteAkkaContext/user/nao/cmd/memory"
   val naoBehavior = s"$remoteAkkaContext/user/nao/cmd/behavior"
 
+  def sendPost(msg: String): String = {
+    //TODO: refractor this java copy/paste method
+    val client = new HttpClient()
+    client.getParams.setParameter("http.useragent", "Test Client")
+    val method = new PostMethod("http://localhost:8080/t24/enquiry")
+    method.addParameter("q", msg)
+    var br: BufferedReader = null
+    try {
+      val returnCode = client.executeMethod(method)
+      method.getResponseBodyAsString()
+    } catch {
+      case e: Exception =>
+        e.getMessage
+    } finally {
+      method.releaseConnection()
+      if (br != null) try {
+        br.close()
+      } catch {
+        case _: Throwable =>
+      }
+
+    }
+  }
+
+  def getBalance(record: String): String = record.split("\"\"").last.replaceAll("\"", "").trim.replace(",", "")
 }

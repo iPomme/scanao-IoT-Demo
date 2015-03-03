@@ -12,8 +12,11 @@ import io.nao.iot.api.IoTService
 @Command(scope = "nao", name = "iot", description = "Execute the demonstration of the Internet of Things demo")
 class IoTCommands extends OsgiCommandSupport {
 
-  @Argument(index = 0, name = "action", description = "The action to perform on the service. Could be start | reset | state | stop", required = true, multiValued = false)
+  @Argument(index = 0, name = "action", description = "The action to perform on the service. Could be start | reset | state | stop | send2T24", required = true, multiValued = false)
   var key: String = null
+
+  @Argument(index = 1, name = "param", description = "The optional parameter.", required = false, multiValued = false)
+  var param: String = null
 
   protected def doExecute: String = {
     val srvName = classOf[IoTService].getName()
@@ -31,6 +34,7 @@ class IoTCommands extends OsgiCommandSupport {
       case (Some(s), "reset") => s.reset()
       case (Some(s), "state") => s.state()
       case (Some(s), "stop") => s.stop()
+      case (Some(s), "send2T24") => println(s.sendToT24(param))
       case (None, _) => println(s"Command '$key' not executed !")
       case (_, _) => println(s"'$key' is an unknown command")
     }

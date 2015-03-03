@@ -8,4 +8,7 @@ trait IoTService {
   def reset()
 
   def state()
+
+  // Test and debug methods
+  def sendToT24(msg : String) : String
 }

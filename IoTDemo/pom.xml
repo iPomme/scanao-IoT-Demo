@@ -70,6 +70,11 @@
             <groupId>io.gatling.uncommons.maths</groupId>
             <artifactId>uncommons-maths</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.servicemix.bundles</groupId>
+            <artifactId>org.apache.servicemix.bundles.commons-httpclient</artifactId>
+            <version>3.1_7</version>
+        </dependency>
         <!-- tracing -->
         <!--<dependency>-->
         <!--<groupId>com.github.levkhomich</groupId>-->
