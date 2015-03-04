@@ -54,5 +54,5 @@ class IoTServiceImpl(system: ActorSystem) extends IoTService {
   }
 
   // Test and debug methods
-  override def sendToT24(msg: String): String = FSMIoTMediator.getBalance(FSMIoTMediator.sendPost(msg))
+  override def sendToT24(msg: String): String = FSMIoTMediator.sendPost(msg)
 }

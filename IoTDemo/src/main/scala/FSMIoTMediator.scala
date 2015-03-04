@@ -216,7 +216,7 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
       log.info(record)
       // Split the answer on the double quote take the last occurence and remove quotes
       val balance = getBalance(record)
-      h(naoText).map(_ ! txt.Say(s"Voila ${u.split(" ").head}, il vous reste $balance sur votre compte!"))
+      h(naoText).map(_ ! txt.Say(s"Voila ${u.split(" ").head}, il vous reste $balance"))
       goto(NextCustomer) using a.copy(user = "UNKNOWN")
     case Event(InfoState, _) =>
       sender() ! "Authenticated"
