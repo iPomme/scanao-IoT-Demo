@@ -20,8 +20,6 @@ class IoTServiceImpl(system: ActorSystem) extends IoTService {
   val mediator = system.actorOf(Props[FSMIoTMediator], "mediator")
 
   override def start(): Unit = {
-    println(s"start called")
-
     /**
      * Thanks to the initialization, all the messages would be stached if the robot is not ready
      */
@@ -36,11 +34,12 @@ class IoTServiceImpl(system: ActorSystem) extends IoTService {
      */
     mediator ! tech.SubscribeEvent("FaceDetected", "SNEvents", "event", mediator) // Subscribe to an event
 
-    println("Starting")
+    println("Starting...")
   }
 
   override def stop(): Unit = {
     println(s"stop called")
+
 
   }
 
@@ -50,9 +49,10 @@ class IoTServiceImpl(system: ActorSystem) extends IoTService {
   }
 
   override def reset(): Unit = {
-    println(s"reset called")
+    mediator ! ResetState
+    println("reset done")
   }
 
   // Test and debug methods
-  override def sendToT24(msg: String): String = FSMIoTMediator.sendPost(msg)
+  override def sendToT24(msg: String): String = FSMIoTMediator.getBalance(FSMIoTMediator.sendPost(msg))
 }

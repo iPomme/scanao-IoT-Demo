@@ -17,6 +17,8 @@
 package io.nao.iot
 
 import java.io.BufferedReader
+import java.net.InetAddress
+import java.util
 
 import akka.actor._
 import io.nao.iot.FSMIoTMediator._
@@ -35,6 +37,8 @@ object InfoState extends DemoMsg
 
 object ResetState extends DemoMsg
 
+object StopDemo extends DemoMsg
+
 // Heart Beat messages
 object SlowHeartBeat extends DemoMsg
 
@@ -44,6 +48,8 @@ object FastHeartBeat extends DemoMsg
 
 // Authentication messages
 case class Authenticate(name: String) extends DemoMsg
+
+case class Welcome(name: String) extends DemoMsg
 
 // T24 messages
 object GetBalance extends DemoMsg
@@ -60,7 +66,9 @@ object Started extends InitState
 
 object Authenticated extends InitState
 
-case class References(queue: scala.collection.immutable.HashMap[String, Option[ActorRef]])
+object NextCustomer extends InitState
+
+case class References(queue: scala.collection.immutable.HashMap[String, Option[ActorRef]], user: String = "UNKNOWN")
 
 /**
  * Actor used to do mediation between Nao and the client.
@@ -87,8 +95,28 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
   // Set the initial state with the list of refs needed, note that at this point all the ActorRef should be set to None
   startWith(Initializing, References(listActorRef))
 
-  when(Initializing) {
-    case Event(ActorIdentity(id, ref@Some(_)), a@References(q)) =>
+  def genericState: StateFunction = {
+    case Event(NaoEvent(eventName, values, message), References(h, u)) =>
+      log.debug(s"received NaoEvent name: $eventName values: $values message: $message")
+      stay()
+    case Event(m: txt.Say, References(h, u)) =>
+      sendSay(m, h)
+      stay()
+    case Event(m: tech.SubscribeEvent, References(h, u)) =>
+      log.debug(s"Got the message $m to send to ${h(naoEvt)}")
+      h(naoEvt).map(_ ! m)
+      stay()
+    case Event(m:tech.UnsubscribeEvent, References(h, u)) =>
+      log.debug(s"Got the message $m to send to ${h(naoEvt)}")
+      h(naoEvt).map(_ ! m)
+      stay()
+    case Event(InfoState, _) =>
+      sender() ! "Not set by the state Function"
+      stay()
+  }
+
+  def initializingState: StateFunction = {
+    case Event(ActorIdentity(id, ref@Some(_)), a@References(q, u)) =>
       log.info(s"Got the reference to $id !!")
       log.debug(s"The current missing remote reference is ${q.filter(_._2 == None)}")
       val uptQueue = q + ((id.toString, ref))
@@ -101,26 +129,21 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
     case Event(ActorIdentity(id, None), a) =>
       log.error(s"Impossible to get the reference to $id")
       stay()
-
     case Event(InfoState, _) =>
       sender() ! "Initializing ..."
       stay()
-    case Event(m@_, References(h)) =>
+    case Event(m@_, References(h, u)) =>
       stash()
       log.info(s"Message $m stached as still initializing")
       stay()
-    //TODO: Manage to watch all the remote references.
+
   }
 
-  when(Initialized) {
-    case Event(m: txt.Say, References(h)) =>
-      sendSay(m, h)
-      stay()
-    case Event(m: tech.SubscribeEvent, References(h)) =>
-      log.info(s"Got the message $m to send to ${h(naoText)}")
-      h(naoEvt).map(_ ! m)
-      stay()
-    case Event(m@tech.EventSubscribed(name, module, method), References(h)) =>
+  when(Initializing)(initializingState orElse genericState)
+
+
+  def initializedSate: StateFunction = {
+    case Event(m@tech.EventSubscribed(name, module, method), References(h, u)) =>
       log.info(s"Subscribed to $m")
       h(naoText).map(_ ! txt.Say("Je suis pret"))
       goto(Started)
@@ -130,58 +153,115 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
 
   }
 
-  when(Started) {
-    case Event(m: txt.Say, References(h)) =>
-      sendSay(m, h)
+  when(Initialized)(initializedSate orElse genericState)
+
+  def NextCustomerSate: StateFunction = {
+    case Event(m@tech.EventSubscribed(name, module, method), References(h, u)) =>
+      log.info(s"Subscribed to $m")
+      h(naoText).map(_ ! txt.Say("a votre service, quel va etre mon prochain client ?"))
+      goto(Started)
+    case Event(InfoState, _) =>
+      sender() ! "NextCustomer"
       stay()
-    case Event(NaoEvent(eventName, values, message), References(h)) =>
-      log.info(s"received NaoEvent name: $eventName values: $values message: $message")
-      // TODO: act according in case of nao event received.
-      if (eventName == "FaceDetected") {
-        goto(Authenticated)
+
+  }
+
+  when(NextCustomer)(NextCustomerSate orElse genericState)
+
+  def startedState: StateFunction = {
+    case Event(NaoEvent(eventName, values, message), a@References(h, u)) =>
+      //      log.info(s"received NaoEvent name: $eventName values(${values.getClass.getCanonicalName}}): $values message: $message")
+      recoFace(eventName, values.asInstanceOf[util.ArrayList[Any]]) match {
+        case None => stay()
+        case Some(name) =>
+          goto(Authenticated) using a.copy(user = name)
       }
+    case Event(m@tech.EventSubscribed(name, module, method), References(h, u)) =>
+      log.info(s"Subscribed to $m")
+      h(naoText).map(_ ! txt.Say("a votre service, quel va etre mon prochain client ?"))
+      stay()
+    case Event(NaoEvent(eventName, values, message), a@References(h, u)) =>
+      //      log.info(s"received NaoEvent name: $eventName values(${values.getClass.getCanonicalName}}): $values message: $message")
+      recoFace(eventName, values.asInstanceOf[util.ArrayList[Any]]) match {
+        case None => stay()
+        case Some(name) =>
+          log.info(s"Recognized $name")
+          goto(Authenticated) using a.copy(user = name)
+      }
+    case Event(m@tech.EventSubscribed(name, module, method), References(h, u)) =>
+      log.info(s"Subscribed to $m")
+      h(naoText).map(_ ! txt.Say("a votre service, quel va etre mon prochain client ?"))
       stay()
     case Event(InfoState, _) =>
       sender() ! "Started"
       stay()
-    case Event(m@_, References(h)) =>
-      log.info(s"UNKNOWN MESSAGE: $m")
+    case Event(StopDemo, References(h, u)) =>
+      goto(Initialized)
+    case Event(InfoState, _) =>
+      sender() ! "Started"
       stay()
+    case Event(StopDemo, References(h, u)) =>
+      goto(Initialized)
   }
 
-  when(Authenticated) {
-    case Event(m: txt.Say, References(h)) =>
-      sendSay(m, h)
-      stay()
-    case Event(ResetState, _) =>
-      goto(Started)
-    case Event(NaoEvent(eventName, values, message), References(h)) =>
-      log.info(s"received NaoEvent name: $eventName values: $values message: $message")
+  when(Started)(startedState orElse genericState)
 
-      stay()
-    case Event(GetBalance, References(h)) =>
-      h(naoText).map(_ ! txt.Say(s"Bon, je vais demander ce qu'il te reste sur ton compte."))
-      val record = sendPost("ENQUIRY.SELECT,,INPUTT/123456,ACCOUNT-LIST,@ID:EQ:=2000000062")
-      // Split the answer on the double quote take the last occurence and remove quotes and comma
+
+  def authState: StateFunction = {
+    case Event(ResetState, a@References(h, u)) =>
+      goto(Started) using a.copy(user = "UNKNOWN")
+    case Event(GetBalance, a@References(h, u)) =>
+      h(naoText).map(_ ! txt.Say(s"Bonjour $u bienvenue dans votre system bancaire, bon, je vais demander ce qu'il vous reste sur votre compte."))
+      val record = sendPost(s"ENQUIRY.SELECT,,INPUTT/123456,ACCOUNT-LIST,@ID:EQ:=${getAccountNb(u)}")
+      log.info(record)
+      // Split the answer on the double quote take the last occurence and remove quotes
       val balance = getBalance(record)
-      h(naoText).map(_ ! txt.Say(s"Chere Nicolas, il the reste $balance sur ton compte!"))
-      stay()
+      h(naoText).map(_ ! txt.Say(s"Voila ${u.split(" ").head}, il vous reste $balance sur votre compte!"))
+      goto(NextCustomer) using a.copy(user = "UNKNOWN")
     case Event(InfoState, _) =>
       sender() ! "Authenticated"
       stay()
-    case Event(m@_, References(h)) =>
+    case Event(StopDemo, a@References(h, u)) =>
+      goto(Initialized) using a.copy(user = "UNKNOWN")
+  }
+
+  when(Authenticated)(authState orElse genericState)
+
+  whenUnhandled {
+    case Event(m@_, References(h, u)) =>
       log.info(s"UNKNOWN MESSAGE: $m")
       stay()
   }
 
   onTransition {
+    //Initializing
     case Initializing -> Initialized =>
       log.info("Transition to Initialized, unstash the messages ...")
       unstashAll()
+    //Initialized
     case Initialized -> Started =>
       log.info("Transition to Started")
+    //Started
+    case Started -> Initialized =>
+      log.info("Transition to Initialized")
     case Started -> Authenticated =>
+      log.info("Transition to Authenticated")
+      self ! tech.UnsubscribeEvent("FaceDetected", "SNEvents")
       self ! GetBalance
+    //NextCustomer
+    case NextCustomer -> Authenticated =>
+      log.info("Transition to Authenticated")
+      self ! tech.UnsubscribeEvent("FaceDetected", "SNEvents")
+    //Authenticated
+    case Authenticated -> NextCustomer =>
+      log.info("Transition to NextCustomer")
+      self ! tech.SubscribeEvent("FaceDetected", "SNEvents", "event", self)
+    case Authenticated -> Initialized =>
+      log.info("Transition to Initialized")
+      self ! tech.SubscribeEvent("FaceDetected", "SNEvents", "event", self)
+    case Authenticated -> Started =>
+      log.info("Transition to Started")
+      self ! tech.SubscribeEvent("FaceDetected", "SNEvents", "event", self)
 
   }
 
@@ -199,6 +279,38 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
     }
   }
 
+  def recoFace(eventName: String, values: util.ArrayList[Any]): Option[String] = {
+    val recoLevel = 0.6
+    eventName match {
+      case "FaceDetected" =>
+        try {
+          val faceDetected = values.asInstanceOf[java.util.ArrayList[Any]].get(1).asInstanceOf[java.util.ArrayList[Any]]
+          val faceInfo = faceDetected.get(0).asInstanceOf[java.util.ArrayList[Any]]
+          val extraInfo = faceInfo.get(1).asInstanceOf[java.util.ArrayList[Any]]
+          val score: Float = extraInfo.get(1).asInstanceOf[Float]
+          val label = extraInfo.get(2).asInstanceOf[String]
+          score match {
+            case s if s >= recoLevel => Some(label)
+            case s if s < recoLevel => None
+          }
+        } catch {
+          case _ => None
+        }
+
+    }
+  }
+
+  def getAccountNb(name: String): String = {
+    name match {
+      case "Nicolas Jorand" => "2000000062"
+      case "Yuuta Jorand" => "2000000097"
+      case "Natsumi Jorand" => "2000000078"
+      case "Luisa Jorand" => "2000000208"
+      case "Dany Dubray" => "2000000186"
+      case _ => "2000000089"
+    }
+  }
+
 }
 
 /**
@@ -206,7 +318,7 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
  */
 object FSMIoTMediator {
 
-  val robotIP = "192.168.1.76"
+  val robotIP = InetAddress.getByName("sonny.local").getHostAddress
   val robotPort = "2552"
   val remoteAkkaContext = s"akka.tcp://naoSystem@$robotIP:$robotPort"
   val naoEvt = s"$remoteAkkaContext/user/nao/evt"
@@ -239,5 +351,13 @@ object FSMIoTMediator {
     }
   }
 
-  def getBalance(record: String): String = record.split("\"\"").last.replaceAll("\"", "").trim.replace(",", "")
+  def getBalance(record: String): String = {
+    val splitted = record.split("\"\t\"")
+    val rawCurrency = splitted(1).replaceAll("\"", "").trim
+    val rawBalance = splitted.last.replaceAll("\"", "").trim
+    rawBalance match {
+      case xs if xs startsWith ("-") => s"un montant négatif de ${xs.tail} $rawCurrency"
+      case xs@_ => s"$xs $rawCurrency"
+    }
+  }
 }
