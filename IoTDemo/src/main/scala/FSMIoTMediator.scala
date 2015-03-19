@@ -119,7 +119,8 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
   def initializingState: StateFunction = {
     case Event(ActorIdentity(id, ref@Some(_)), a@References(q, u)) =>
       log.info(s"Got the reference to $id !!")
-      log.debug(s"The current missing remote reference is ${q.filter(_._2 == None)}")
+      lazy val missingFeature = q.filter(_._2 == None)
+      log.debug(s"The current missing remote reference is $missingFeature")
       val uptQueue = q + ((id.toString, ref))
       if (uptQueue.values.exists(_ == None))
       // Some remote references are missing, stay in this state till everything initialized
