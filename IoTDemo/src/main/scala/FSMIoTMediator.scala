@@ -16,9 +16,9 @@
  */
 package io.nao.iot
 
-import java.io.BufferedReader
 import java.net.InetAddress
 import java.util
+
 
 import akka.actor._
 import io.nao.iot.FSMIoTMediator._
@@ -28,6 +28,7 @@ import org.apache.commons.httpclient.HttpClient
 import org.apache.commons.httpclient.methods.PostMethod
 
 import scala.collection.immutable.HashMap
+import scala.util.{Success, Try, Failure}
 
 // Message for this demonstration
 sealed trait DemoMsg
@@ -275,7 +276,7 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
   def sendSay(msg: txt.Say, ref: HashMap[String, Option[ActorRef]]) {
     log.info(s"Got the message $msg to send to ${ref(naoText)}")
     traceSay(msg) {
-      ref(naoText).get ! msg
+      ref(naoText).map(_ ! msg)
     }
   }
 
@@ -283,7 +284,7 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
     val recoLevel = 0.6
     eventName match {
       case "FaceDetected" =>
-        try {
+        Try{
           val faceDetected = values.asInstanceOf[java.util.ArrayList[Any]].get(1).asInstanceOf[java.util.ArrayList[Any]]
           val faceInfo = faceDetected.get(0).asInstanceOf[java.util.ArrayList[Any]]
           val extraInfo = faceInfo.get(1).asInstanceOf[java.util.ArrayList[Any]]
@@ -293,8 +294,9 @@ class FSMIoTMediator extends Actor with FSM[InitState, References] with Stash wi
             case s if s >= recoLevel => Some(label)
             case s if s < recoLevel => None
           }
-        } catch {
-          case _ => None
+        } match {
+          case Success(name) => name
+          case Failure(_) => None
         }
 
     }
@@ -333,19 +335,14 @@ object FSMIoTMediator {
     client.getParams.setParameter("http.useragent", "Test Client")
     val method = new PostMethod("http://localhost:8080/t24/enquiry")
     method.addParameter("q", msg)
-    var br: BufferedReader = null
-    try {
+    Try {
       val returnCode = client.executeMethod(method)
       method.getResponseBodyAsString()
-    } catch {
-      case e: Exception =>
-        e.getMessage
-    } finally {
-      method.releaseConnection()
-      if (br != null) try {
-        br.close()
-      } catch {
-        case _: Throwable =>
+    } match {
+      case Failure(e: Exception) => e.getMessage
+      case Success(msg) => {
+        method.releaseConnection()
+        msg
       }
 
     }
@@ -354,7 +351,7 @@ object FSMIoTMediator {
   def getBalance(record: String): String = {
     val splitted = record.split("\"\t\"")
     val rawCurrency = splitted(1).replaceAll("\"", "").trim
-    val rawBalance = splitted.last.replaceAll("\"", "").trim
+    val rawBalance : String = splitted.lastOption.getOrElse("").replaceAll("\"", "").trim
     rawBalance match {
       case xs if xs startsWith ("-") => s"un montant négatif de ${xs.tail} $rawCurrency"
       case xs@_ => s"$xs $rawCurrency"

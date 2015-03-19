@@ -13,10 +13,10 @@ import io.nao.iot.api.IoTService
 class IoTCommands extends OsgiCommandSupport {
 
   @Argument(index = 0, name = "action", description = "The action to perform on the service. Could be start | reset | state | stop | send2T24", required = true, multiValued = false)
-  var key: String = None.orNull
+  var key: String = "notSet"
 
   @Argument(index = 1, name = "param", description = "The optional parameter.", required = false, multiValued = false)
-  var param: String = None.orNull
+  var param: String = "notSet"
 
   protected def doExecute: String = {
     val srvName = classOf[IoTService].getName()
